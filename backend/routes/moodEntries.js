@@ -5,9 +5,7 @@
 // called from a shared, unauthenticated door-screen device (iPad) that
 // a student taps on. Protection model: (1) closed set of valid mood
 // values, (2) rate limiting per IP, (3) no sensitive data in the
-// response. Unlike the old qr_token design, student_id is visible in
-// the name-grid UI by design — this trades per-student secrecy for
-// ease of use with young kids on a shared classroom device.
+// response. student_id is visible in the name-grid UI by design.
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import supabase from '../supabaseClient.js';
@@ -33,7 +31,11 @@ const kioskLimiter = rateLimit({
 
 // POST /mood-entries/kiosk
 // Body: { student_id, mood }
-// Public (no login) — this is the door-screen endpoint.
+// Public (no login) — door-screen endpoint. First tap of the day
+// for a student = "morning" and auto-marks attendance present.
+// Second tap = "afternoon" (departure), no attendance change.
+// A third+ tap the same day just updates the afternoon entry —
+// "latest tap wins" for departure mood/time.
 router.post('/kiosk', kioskLimiter, async (req, res) => {
   const { student_id, mood } = req.body;
 
@@ -46,7 +48,7 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
 
   const { data: student, error: studentErr } = await supabase
     .from('students')
-    .select('id, name, group_id')
+    .select('id, name, group_id, country')
     .eq('id', student_id)
     .maybeSingle();
 
@@ -60,6 +62,21 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
 
   const now = new Date();
   const entryDate = now.toISOString().split('T')[0];
+  const month = monthLabel(now);
+
+  const { data: todaysEntries, error: todayErr } = await supabase
+    .from('mood_entries')
+    .select('period')
+    .eq('student_id', student.id)
+    .eq('entry_date', entryDate);
+
+  if (todayErr) {
+    console.error('[mood-kiosk] today lookup error:', todayErr.message);
+    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+
+  const hasMorning = todaysEntries?.some((e) => e.period === 'morning');
+  const period = hasMorning ? 'afternoon' : 'morning';
 
   const { error: upsertErr } = await supabase
     .from('mood_entries')
@@ -69,9 +86,11 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
         group_id: student.group_id,
         mood,
         entry_date: entryDate,
-        month: monthLabel(now),
+        month,
+        period,
+        recorded_at: now.toISOString(),
       },
-      { onConflict: 'student_id,entry_date' }
+      { onConflict: 'student_id,entry_date,period' }
     );
 
   if (upsertErr) {
@@ -79,8 +98,28 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
     return res.status(500).json({ error: 'Could not save your mood. Please try again.' });
   }
 
+  if (period === 'morning') {
+    const { error: attErr } = await supabase
+      .from('attendance_entries')
+      .upsert(
+        {
+          student_id: student.id,
+          group_id: student.group_id,
+          date: entryDate,
+          status: 'P',
+          month,
+          country: student.country,
+        },
+        { onConflict: 'student_id,date' }
+      );
+
+    if (attErr) {
+      console.error('[mood-kiosk] attendance upsert error:', attErr.message);
+    }
+  }
+
   const firstName = student.name?.split(' ')[0] || 'there';
-  res.json({ ok: true, firstName, mood });
+  res.json({ ok: true, firstName, mood, period });
 });
 
 // GET /mood-entries/roster-public?group_id=...
@@ -161,7 +200,7 @@ router.get('/individual', requireTeacher, async (req, res) => {
 
   const { data: entries, error } = await supabase
     .from('mood_entries')
-    .select('mood, entry_date')
+    .select('mood, entry_date, period, recorded_at')
     .eq('student_id', student_id)
     .gte('entry_date', start.toISOString().split('T')[0])
     .lte('entry_date', end.toISOString().split('T')[0])
