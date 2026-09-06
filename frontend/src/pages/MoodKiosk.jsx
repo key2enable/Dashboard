@@ -1,10 +1,9 @@
 // MoodKiosk.jsx
-// Description: Public, unauthenticated door-screen page. A student
-// scans their QR card, then taps how they feel. No login — this runs
-// on a shared device mounted at the classroom door.
-import { useEffect, useRef, useState } from 'react';
+// Description: Public, unauthenticated door-screen page. A teacher
+// picks the group once; students then tap their own name and mood.
+// No login, no QR card — runs on a shared iPad in the classroom.
+import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Html5Qrcode } from 'html5-qrcode';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -16,60 +15,42 @@ const MOODS = [
   { key: 'sad', label: 'Sad', emoji: '😢', color: '#5AA9E6' },
 ];
 
-const QR_READER_ID = 'mood-kiosk-qr-reader';
-
 function MoodKiosk() {
-  // stage: 'scan' | 'mood' | 'confirm' | 'error'
-  const [stage, setStage] = useState('scan');
-  const [qrToken, setQrToken] = useState(null);
+  // stage: 'group' | 'names' | 'mood' | 'confirm' | 'error'
+  const [stage, setStage] = useState('group');
+  const [groups, setGroups] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [firstName, setFirstName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const scannerRef = useRef(null);
-
-  // Start/stop the camera scanner only while on the 'scan' stage.
+  // Load groups once, for the initial picker.
   useEffect(() => {
-    if (stage !== 'scan') return;
+    axios
+      .get(`${BASE_URL}/groups`)
+      .then((res) => setGroups(res.data))
+      .catch(() => setGroups([]));
+  }, []);
 
-    const scanner = new Html5Qrcode(QR_READER_ID);
-    scannerRef.current = scanner;
-    let cancelled = false;
-
-    scanner
-      .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 260, height: 260 } },
-        (decodedText) => {
-          if (cancelled) return;
-          cancelled = true;
-          setQrToken(decodedText.trim());
-          setStage('mood');
-        },
-        () => {
-          // per-frame scan failures are expected constantly — ignore
-        }
-      )
-      .catch(() => {
-        setErrorMsg('Could not access the camera. Please ask a teacher for help.');
-        setStage('error');
-      });
-
-    return () => {
-      cancelled = true;
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
-        scannerRef.current.clear();
-      }
-    };
-  }, [stage]);
+  // Load the roster whenever a group is chosen.
+  useEffect(() => {
+    if (!selectedGroup) return;
+    axios
+      .get(`${BASE_URL}/mood-entries/roster-public`, {
+        params: { group_id: selectedGroup.id },
+      })
+      .then((res) => setStudents(res.data))
+      .catch(() => setStudents([]));
+  }, [selectedGroup]);
 
   const submitMood = async (moodKey) => {
-    if (!qrToken || submitting) return;
+    if (!selectedStudent || submitting) return;
     setSubmitting(true);
     try {
       const res = await axios.post(`${BASE_URL}/mood-entries/kiosk`, {
-        qr_token: qrToken,
+        student_id: selectedStudent.id,
         mood: moodKey,
       });
       setFirstName(res.data.firstName || '');
@@ -84,38 +65,79 @@ function MoodKiosk() {
     }
   };
 
-  // Auto-reset back to the scan screen after confirming or erroring.
+  // Auto-reset back to the name grid (not the group picker — the
+  // group stays selected all day on a classroom-mounted device).
   useEffect(() => {
     if (stage !== 'confirm' && stage !== 'error') return;
     const t = setTimeout(() => {
-      setQrToken(null);
+      setSelectedStudent(null);
       setFirstName('');
       setErrorMsg('');
-      setStage('scan');
-    }, 3500);
+      setStage('names');
+    }, 3000);
     return () => clearTimeout(t);
   }, [stage]);
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F3F9FD] p-6 text-center select-none">
-      {stage === 'scan' && (
+      {stage === 'group' && (
+        <>
+          <h1 className="text-3xl font-bold mb-8 text-[#1F2937]">
+            Which group is this? 🏫
+          </h1>
+          <div className="grid grid-cols-2 gap-6 max-w-xl">
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => {
+                  setSelectedGroup(g);
+                  setStage('names');
+                }}
+                className="rounded-3xl shadow-md p-8 bg-white text-xl font-semibold text-[#1F2937] active:scale-95 transition-transform"
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {stage === 'names' && (
         <>
           <h1 className="text-3xl font-bold mb-2 text-[#1F2937]">
-            Scan your card 🪪
+            Find your name 👋
           </h1>
-          <p className="text-gray-500 mb-6">Hold your QR card up to the camera</p>
-          <div
-            id={QR_READER_ID}
-            className="rounded-2xl overflow-hidden shadow-lg"
-            style={{ width: 320, height: 320 }}
-          />
+          <p className="text-gray-500 mb-6">{selectedGroup?.name}</p>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-w-3xl">
+            {students.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => {
+                  setSelectedStudent(s);
+                  setStage('mood');
+                }}
+                className="rounded-2xl shadow-md p-5 bg-white text-lg font-medium text-[#1F2937] active:scale-95 transition-transform min-h-[80px]"
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              setSelectedGroup(null);
+              setStage('group');
+            }}
+            className="mt-8 text-sm text-gray-400 underline"
+          >
+            Change group
+          </button>
         </>
       )}
 
       {stage === 'mood' && (
         <>
           <h1 className="text-3xl font-bold mb-8 text-[#1F2937]">
-            How are you feeling today?
+            Hi {selectedStudent?.name.split(' ')[0]}! How do you feel today?
           </h1>
           <div className="grid grid-cols-3 gap-6 max-w-2xl">
             {MOODS.map((m) => (

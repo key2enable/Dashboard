@@ -2,11 +2,12 @@
 // Consolidated per-student mood tracking.
 //
 // IMPORTANT: POST /kiosk is intentionally NOT behind Clerk auth — it's
-// called from a shared, unauthenticated door-screen device that a
-// student taps/scans. Do not add requireAuth to it. Its protection
-// model is instead: (1) a random qr_token instead of a guessable
-// student id, (2) a closed set of valid mood values, (3) rate
-// limiting, (4) no sensitive data in the response.
+// called from a shared, unauthenticated door-screen device (iPad) that
+// a student taps on. Protection model: (1) closed set of valid mood
+// values, (2) rate limiting per IP, (3) no sensitive data in the
+// response. Unlike the old qr_token design, student_id is visible in
+// the name-grid UI by design — this trades per-student secrecy for
+// ease of use with young kids on a shared classroom device.
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import supabase from '../supabaseClient.js';
@@ -31,23 +32,22 @@ const kioskLimiter = rateLimit({
 });
 
 // POST /mood-entries/kiosk
-// Body: { qr_token, mood }
+// Body: { student_id, mood }
 // Public (no login) — this is the door-screen endpoint.
 router.post('/kiosk', kioskLimiter, async (req, res) => {
-  const { qr_token, mood } = req.body;
+  const { student_id, mood } = req.body;
 
-  if (!qr_token || typeof qr_token !== 'string') {
-    return res.status(400).json({ error: 'Missing or invalid qr_token' });
+  if (!student_id) {
+    return res.status(400).json({ error: 'Missing student_id' });
   }
   if (!VALID_MOODS.includes(mood)) {
     return res.status(400).json({ error: 'Invalid mood value' });
   }
 
-  // Look up the student by their QR token, never by raw id.
   const { data: student, error: studentErr } = await supabase
     .from('students')
     .select('id, name, group_id')
-    .eq('qr_token', qr_token)
+    .eq('id', student_id)
     .maybeSingle();
 
   if (studentErr) {
@@ -55,9 +55,7 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
     return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
   if (!student) {
-    // Deliberately vague — don't reveal whether the token format was
-    // valid, just unknown, to avoid helping someone enumerate tokens.
-    return res.status(404).json({ error: 'Card not recognized. Please ask a teacher for help.' });
+    return res.status(404).json({ error: 'Student not found.' });
   }
 
   const now = new Date();
@@ -81,10 +79,25 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
     return res.status(500).json({ error: 'Could not save your mood. Please try again.' });
   }
 
-  // Return just enough for a friendly "Thanks, Alex!" confirmation
-  // screen — first name only, nothing else about the student.
   const firstName = student.name?.split(' ')[0] || 'there';
   res.json({ ok: true, firstName, mood });
+});
+
+// GET /mood-entries/roster-public?group_id=...
+// Public (no login) — used by the kiosk to show a tappable grid of
+// student names for the selected group. Names only, no tokens.
+router.get('/roster-public', kioskLimiter, async (req, res) => {
+  const { group_id } = req.query;
+  if (!group_id) return res.status(400).json({ error: 'Missing group_id' });
+
+  const { data: students, error } = await supabase
+    .from('students')
+    .select('id, name')
+    .eq('group_id', group_id)
+    .order('name', { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(students);
 });
 
 // GET /mood-entries/roster-qr?group_id=...&clerk_user_id=...
@@ -94,7 +107,6 @@ router.get('/roster-qr', requireTeacher, async (req, res) => {
   const { group_id } = req.query;
   if (!group_id) return res.status(400).json({ error: 'Missing group_id' });
 
-  // Confirm this teacher actually owns this group before returning tokens.
   const { data: link, error: linkErr } = await supabase
     .from('group_teachers')
     .select('group_id')
