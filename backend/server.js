@@ -62,7 +62,6 @@ app.use('/student-quizzes', studentQuizzesRoute);
 // requireTeacher internally. Do not wrap this whole router in
 // requireAuth when you apply Critical #1.
 app.use('/mood-entries', moodEntryRoutes);
-app.use(quizFolderRoutes);
 app.use('/api', translateRoute);
 
 // Health check
@@ -70,7 +69,13 @@ app.get('/', (req, res) => {
   res.send('✅ Key2Enable backend is up and running!');
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
-});
+// Start server — only when running locally. On Vercel, the platform
+// invokes the exported app as a serverless function instead of us
+// calling .listen() ourselves.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
