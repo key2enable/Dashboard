@@ -15,12 +15,28 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown } from "lucide-react";
 
+// Generates month labels like "September 2026" for the last N months,
+// ending with the current month — always current, no manual updates.
+function getRecentMonths(count = 18) {
+  const months = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(d.toLocaleString('default', { month: 'long', year: 'numeric' }));
+  }
+  return months; // most recent first
+}
+
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 function Attendance() {
   const [entries, setEntries] = useState([]);
   const [students, setStudents] = useState([]);
-  const [month, setMonth] = useState(localStorage.getItem('attendanceMonth') || "April 2025");
+  const [month, setMonth] = useState(
+  localStorage.getItem('attendanceMonth') ||
+    new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
+);
   const [groupId, setGroupId] = useState(localStorage.getItem('attendanceGroupId') || "");
   const [groupOptions, setGroupOptions] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
@@ -124,7 +140,7 @@ function Attendance() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {["April 2025", "May 2025", "June 2025", "July 2025", "August 2025", "September 2025","October 2025", "November 2025", "December 2025"].map((m) => (
+                {getRecentMonths().map((m) => (
                   <DropdownMenuItem
                     key={m}
                     onClick={() => {
