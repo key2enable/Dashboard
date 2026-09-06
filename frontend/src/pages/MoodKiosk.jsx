@@ -130,10 +130,16 @@ function MoodKiosk() {
               setSelectedGroup(null);
               setStage('group');
             }}
-            className="mt-8 text-sm text-gray-400 underline"
+            className="mt-8 text-sm text-gray-400 underline block mx-auto"
           >
             Change group
           </button>
+          <Link
+            to="/teacher/dashboard"
+            className="mt-3 text-sm text-gray-400 underline block"
+          >
+            ← Back to Dashboard
+          </Link>
         </>
       )}
 
