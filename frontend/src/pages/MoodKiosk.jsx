@@ -16,17 +16,6 @@ const MOODS = [
   { key: 'sad', label: 'Sad', emoji: '😢', color: '#5AA9E6' },
 ];
 
-function BackToDashboardLink() {
-  return (
-    <Link
-      to="/teacher/dashboard"
-      className="fixed top-4 left-4 text-sm text-gray-400 hover:text-gray-600 underline print:hidden"
-    >
-      ← Back to Dashboard
-    </Link>
-  );
-}
-
 function MoodKiosk() {
   // stage: 'group' | 'names' | 'mood' | 'confirm' | 'error'
   const [stage, setStage] = useState('group');
@@ -88,8 +77,6 @@ function MoodKiosk() {
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F3F9FD] p-6 text-center select-none relative">
-      {(stage === 'group' || stage === 'names') && <BackToDashboardLink />}
-
       {stage === 'group' && (
         <>
           <h1 className="text-3xl font-bold mb-8 text-[#1F2937]">
@@ -109,6 +96,12 @@ function MoodKiosk() {
               </button>
             ))}
           </div>
+          <Link
+            to="/teacher/dashboard"
+            className="mt-8 text-sm text-gray-400 underline block"
+          >
+            ← Back to Dashboard
+          </Link>
         </>
       )}
 
