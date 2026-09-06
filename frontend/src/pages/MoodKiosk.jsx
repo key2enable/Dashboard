@@ -3,6 +3,7 @@
 // picks the group once; students then tap their own name and mood.
 // No login, no QR card — runs on a shared iPad in the classroom.
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -15,6 +16,17 @@ const MOODS = [
   { key: 'sad', label: 'Sad', emoji: '😢', color: '#5AA9E6' },
 ];
 
+function BackToDashboardLink() {
+  return (
+    <Link
+      to="/teacher/dashboard"
+      className="fixed top-4 left-4 text-sm text-gray-400 hover:text-gray-600 underline print:hidden"
+    >
+      ← Back to Dashboard
+    </Link>
+  );
+}
+
 function MoodKiosk() {
   // stage: 'group' | 'names' | 'mood' | 'confirm' | 'error'
   const [stage, setStage] = useState('group');
@@ -26,7 +38,6 @@ function MoodKiosk() {
   const [errorMsg, setErrorMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Load groups once, for the initial picker.
   useEffect(() => {
     axios
       .get(`${BASE_URL}/groups`)
@@ -34,7 +45,6 @@ function MoodKiosk() {
       .catch(() => setGroups([]));
   }, []);
 
-  // Load the roster whenever a group is chosen.
   useEffect(() => {
     if (!selectedGroup) return;
     axios
@@ -65,8 +75,6 @@ function MoodKiosk() {
     }
   };
 
-  // Auto-reset back to the name grid (not the group picker — the
-  // group stays selected all day on a classroom-mounted device).
   useEffect(() => {
     if (stage !== 'confirm' && stage !== 'error') return;
     const t = setTimeout(() => {
@@ -79,7 +87,9 @@ function MoodKiosk() {
   }, [stage]);
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F3F9FD] p-6 text-center select-none">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F3F9FD] p-6 text-center select-none relative">
+      {(stage === 'group' || stage === 'names') && <BackToDashboardLink />}
+
       {stage === 'group' && (
         <>
           <h1 className="text-3xl font-bold mb-8 text-[#1F2937]">
