@@ -76,10 +76,10 @@ function MoodKiosk() {
   }, [stage]);
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F3F9FD] p-6 text-center select-none relative">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#F7F3EA] p-6 text-center select-none relative">
       {stage === 'group' && (
         <>
-          <h1 className="text-3xl font-bold mb-8 text-[#1F2937]">
+          <h1 className="text-3xl font-bold mb-8 text-[#3D3A35]">
             Which group is this? 🏫
           </h1>
           <div className="grid grid-cols-2 gap-6 max-w-xl">
@@ -90,7 +90,7 @@ function MoodKiosk() {
                   setSelectedGroup(g);
                   setStage('names');
                 }}
-                className="rounded-3xl shadow-md p-8 bg-white text-xl font-semibold text-[#1F2937] active:scale-95 transition-transform"
+                className="rounded-3xl shadow-md p-8 bg-[#FFFDF8] text-xl font-semibold text-[#3D3A35] active:scale-95 transition-transform"
               >
                 {g.name}
               </button>
@@ -107,7 +107,7 @@ function MoodKiosk() {
 
       {stage === 'names' && (
         <>
-          <h1 className="text-3xl font-bold mb-2 text-[#1F2937]">
+          <h1 className="text-3xl font-bold mb-2 text-[#3D3A35]">
             Find your name 👋
           </h1>
           <p className="text-gray-500 mb-6">{selectedGroup?.name}</p>
@@ -119,7 +119,7 @@ function MoodKiosk() {
                   setSelectedStudent(s);
                   setStage('mood');
                 }}
-                className="rounded-2xl shadow-md p-5 bg-white text-lg font-medium text-[#1F2937] active:scale-95 transition-transform min-h-[80px]"
+                className="rounded-2xl shadow-md p-5 bg-[#FFFDF8] text-lg font-medium text-[#3D3A35] active:scale-95 transition-transform min-h-[80px]"
               >
                 {s.name}
               </button>
@@ -145,7 +145,7 @@ function MoodKiosk() {
 
       {stage === 'mood' && (
         <>
-          <h1 className="text-3xl font-bold mb-8 text-[#1F2937]">
+          <h1 className="text-3xl font-bold mb-8 text-[#3D3A35]">
             Hi {selectedStudent?.name.split(' ')[0]}! How do you feel today?
           </h1>
           <div className="grid grid-cols-3 gap-6 max-w-2xl">
@@ -168,7 +168,7 @@ function MoodKiosk() {
       {stage === 'confirm' && (
         <div className="animate-pulse">
           <span className="text-7xl block mb-4">✅</span>
-          <h1 className="text-3xl font-bold text-[#1F2937]">
+          <h1 className="text-3xl font-bold text-[#3D3A35]">
             Thanks{firstName ? `, ${firstName}` : ''}!
           </h1>
           <p className="text-gray-500 mt-2">Have a great day 🌟</p>
@@ -178,7 +178,7 @@ function MoodKiosk() {
       {stage === 'error' && (
         <div>
           <span className="text-7xl block mb-4">😕</span>
-          <h1 className="text-2xl font-semibold text-[#1F2937]">{errorMsg}</h1>
+          <h1 className="text-2xl font-semibold text-[#3D3A35]">{errorMsg}</h1>
         </div>
       )}
     </div>
