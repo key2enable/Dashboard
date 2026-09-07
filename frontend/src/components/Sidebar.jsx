@@ -112,7 +112,7 @@ const Sidebar = () => {
             return (
               <div key="expressia-and-quizzes" className="flex flex-col">
                 {/* Expressia link */}
-                
+                  <a
                   href="https://web.expressia.life/login/default"
                   target="_blank"
                   rel="noopener noreferrer"
