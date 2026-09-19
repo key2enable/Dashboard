@@ -23,11 +23,13 @@ export default function ProtectedRoute({ children, allowedRole, requireAdmin = f
   const { isSignedIn, user } = useUser();
   const role = user?.publicMetadata?.role;
 
-  const email = user?.primaryEmailAddress?.emailAddress;
+  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
   const isAdmin = ADMIN_EMAILS.includes(email);
 
   if (!isSignedIn) return <Navigate to="/dashboard" />;
-  if (allowedRole && role !== allowedRole) return <Navigate to={`/${role}/dashboard`} />;
+  if (allowedRole && role !== allowedRole && !(isAdmin && allowedRole === 'teacher')) {
+    return <Navigate to={role ? `/${role}/dashboard` : '/role-pending'} />;
+  }
   if (requireAdmin && !isAdmin) return <Navigate to="/teacher/dashboard" />;
 
   return children;

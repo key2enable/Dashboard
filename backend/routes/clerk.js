@@ -57,25 +57,13 @@
 
 // backend/routes/clerk.js
 import express from 'express';
-import { clerkClient } from '@clerk/clerk-sdk-node'; // install this package if not yet done
 
 const router = express.Router();
 
 router.post('/set-role', async (req, res) => {
-  const { clerk_user_id, role } = req.body;
-
-  try {
-    await clerkClient.users.updateUserMetadata(clerk_user_id, {
-      publicMetadata: {
-        role,
-      },
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ Clerk update error:', err);
-    res.status(500).json({ error: 'Failed to set role in Clerk' });
-  }
+  // Roles are an authorization boundary. A user must never be allowed to set
+  // their own public role through an API request.
+  res.status(403).json({ error: 'Roles can only be changed by an administrator in Clerk' });
 });
 
 export default router;

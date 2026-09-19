@@ -1,23 +1,25 @@
 // backend/routes/teachers.js
 import express from 'express';
 import supabase from '../supabaseClient.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
 
 // POST /teachers
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const { name, email, clerk_user_id } = req.body;
 
-  if (!name || !email || !clerk_user_id) {
+  if (!name || !email) {
     return res.status(400).json({ error: 'Missing fields' });
   }
+  const normalizedEmail = email.trim().toLowerCase();
 
   // Check if teacher already exists
   const { data: existing, error: findError } = await supabase
     .from('teachers')
     .select('*')
-    .eq('email', email)
+    .ilike('email', normalizedEmail)
     .maybeSingle();
 
   if (findError) return res.status(500).json({ error: findError.message });
@@ -28,7 +30,8 @@ router.post('/', async (req, res) => {
 
   const { data, error } = await supabase
     .from('teachers')
-    .insert([{ name, email, clerk_user_id }]);
+    .insert([{ name, email: normalizedEmail, clerk_user_id: clerk_user_id || null, is_new: false }])
+    .select();
 
   if (error) {
     console.error("❌ Supabase insert error:", error);
@@ -41,7 +44,7 @@ router.post('/', async (req, res) => {
 
 // GET /teachers/by-clerk-id?clerk_user_id=...
 router.get('/by-clerk-id', async (req, res) => {
-  const { clerk_user_id } = req.query;
+  const clerk_user_id = req.authUserId;
 
   const { data, error } = await supabase
     .from('teachers')
@@ -56,7 +59,7 @@ router.get('/by-clerk-id', async (req, res) => {
 
 
 // GET /teachers/with-groups
-router.get('/with-groups', async (req, res) => {
+router.get('/with-groups', requireAdmin, async (req, res) => {
   const { data, error } = await supabase
     .from('teachers')
     .select(`
@@ -77,7 +80,7 @@ router.get('/with-groups', async (req, res) => {
 });
 
 // PUT /:id — update basic teacher info
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, email, country } = req.body;
 
@@ -98,7 +101,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // PUT /teachers/:id/groups
-router.put('/:id/groups', async (req, res) => {
+router.put('/:id/groups', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { group_ids } = req.body;
 
@@ -137,5 +140,3 @@ router.put('/:id/groups', async (req, res) => {
 
 
 export default router;
-
-

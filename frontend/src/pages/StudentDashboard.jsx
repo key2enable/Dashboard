@@ -1,7 +1,7 @@
 // StudentDashboard.jsx
 // Description: Student dashboard page showing summary and mood chart
 
-import { useUser } from '@clerk/clerk-react';
+import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useState, useMemo } from 'react';
 import EvelynCard from '../components/EvelynCard';
 import StudentSidebar from '../components/StudentSidebar';
@@ -22,6 +22,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 function StudentDashboard() {
   const { user, isLoaded } = useUser();
+  const { getToken } = useAuth();
   const [summary, setSummary] = useState(null);
   const [moodSummary, setMoodSummary] = useState({});
   const [moodType, setMoodType] = useState('month');
@@ -38,7 +39,10 @@ function StudentDashboard() {
     const fetchSummary = async () => {
       if (!isLoaded || !user) return;
       try {
-        const res = await fetch(`${BASE_URL}/students/summary/${user.id}?month=${selectedMonth}`);
+        const token = await getToken();
+        const res = await fetch(`${BASE_URL}/students/summary/${user.id}?month=${selectedMonth}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const data = await res.json();
         setSummary(data);
       } catch (err) {
@@ -46,7 +50,7 @@ function StudentDashboard() {
       }
     };
     fetchSummary();
-  }, [user, isLoaded, selectedMonth]);
+  }, [user, isLoaded, selectedMonth, getToken]);
 
   useEffect(() => {
     if (!summary?.group_id) return;

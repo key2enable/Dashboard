@@ -1,10 +1,11 @@
 import express from 'express';
 import supabase from '../supabaseClient.js';
+import { requireTeacher } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // GET all assessments (optionally filtered by month, language, week, group_id)
-router.get('/', async (req, res) => {
+router.get('/', requireTeacher, async (req, res) => {
   const { month, language, week, group_id } = req.query;
 
   if (!month || !language || !group_id) {
@@ -31,7 +32,7 @@ router.get('/', async (req, res) => {
     }
 
     // Filter by group_id from the joined students table
-    const filtered = data.filter(d => d.students?.group_id === group_id);
+    const filtered = data.filter(d => String(d.students?.group_id) === String(group_id));
 
     res.json(filtered);
   } catch (err) {
@@ -42,10 +43,7 @@ router.get('/', async (req, res) => {
 
 
 // POST /assessments
-router.post('/', async (req, res) => {
-  console.log('POST /assessments - Request received');
-  console.log('Request body:', req.body);
-  
+router.post('/', requireTeacher, async (req, res) => {
   try {
     const {
       student_name,
@@ -108,12 +106,9 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /assessments/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireTeacher, async (req, res) => {
   const { raw_score, max_score } = req.body;
   const id = req.params.id;
-
-  console.log("Received PUT for ID:", id);
-  console.log("Raw Score:", raw_score, "Max Score:", max_score);
 
   const raw = Number(raw_score);
   const max = Number(max_score);

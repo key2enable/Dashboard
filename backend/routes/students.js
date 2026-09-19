@@ -1,21 +1,24 @@
 // routes/students.js
 import express from 'express';
 import supabase from '../supabaseClient.js';
+import { getRequester, requireTeacher } from '../middleware/auth.js';
 
 const router = express.Router();
-
 
 // GET all students (optionally filtered by group_id)
 router.get('/', async (req, res) => {
   const { group_id } = req.query;
+  const requester = await getRequester(req);
 
   let query = supabase
     .from('students')
-    .select('*, groups(name)') // Include group name for display if needed
+    .select('*, groups(name)')
     .order('name', { ascending: true });
 
-  if (group_id) {
-    query = query.eq('group_id', group_id);
+  if (requester?.canManageStudents) {
+    if (group_id) query = query.eq('group_id', group_id);
+  } else {
+    query = query.eq('clerk_user_id', req.authUserId);
   }
 
   const { data, error } = await query;
@@ -26,7 +29,7 @@ router.get('/', async (req, res) => {
 
 
 // POST new student
-router.post('/', async (req, res) => {
+router.post('/', requireTeacher, async (req, res) => {
   const { name, country, group_id, clerk_user_id, email} = req.body;
 
   const { data, error } = await supabase
@@ -38,24 +41,9 @@ router.post('/', async (req, res) => {
   res.status(201).json(data[0]);
 });
 
-
-// PUT /students/:id — full update of student fields
-// router.put('/:id', async (req, res) => {
-//   const { id } = req.params;
-//   const { name, country, group_id, clerk_user_id, email } = req.body;
-
-//   const { data, error } = await supabase
-//     .from('students')
-//     .update({ name, country, group_id, clerk_user_id, email })
-//     .eq('id', id)
-//     .select();
-
-//   if (error) return res.status(500).json({ error: error.message });
-//   res.json(data[0]);
-// });
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireTeacher, async (req, res) => {
   const { id } = req.params;
-  const { name, country, group_id, clerk_user_id, email } = req.body;
+  const { name, country, group_id, email } = req.body;
 
   const updateFields = {
     name,
@@ -63,15 +51,9 @@ router.put('/:id', async (req, res) => {
     group_id,
   };
 
-  if (clerk_user_id && clerk_user_id.trim() !== '') {
-    updateFields.clerk_user_id = clerk_user_id;
-  }
-
   if (email && email.trim() !== '') {
     updateFields.email = email;
   }
-
-  console.log("🛠 Updating student:", id, updateFields);
 
   const { data, error } = await supabase
     .from('students')
@@ -91,6 +73,7 @@ router.put('/:id', async (req, res) => {
 // GET /students/summary/:clerk_user_id
 router.get('/summary/:clerk_user_id', async (req, res) => {
   const { clerk_user_id } = req.params;
+  if (clerk_user_id !== req.authUserId) return res.status(403).json({ error: 'Forbidden' });
   const { month } = req.query;
 
   const studentRes = await supabase
@@ -145,51 +128,16 @@ router.get('/summary/:clerk_user_id', async (req, res) => {
 });
 
 // GET /students/for-teacher
-router.get('/for-teacher', async (req, res) => {
-  const { clerk_user_id } = req.query;
-
-  // Step 1: Find the teacher based on Clerk ID
-  const { data: teacher, error: teacherErr } = await supabase
-    .from('teachers')
-    .select('id')
-    .eq('clerk_user_id', clerk_user_id)
-    .maybeSingle();
-
-  if (teacherErr || !teacher) {
-    console.error("❌ Teacher lookup failed:", teacherErr);
-    return res.status(404).json({ error: 'Teacher not found' });
-  }
-
-  console.log("🔎 teacher", teacher);
-
-  // Step 2: Find the group IDs this teacher manages
-  const { data: groupLinks, error: groupErr } = await supabase
-    .from('group_teachers')
-    .select('group_id')
-    .eq('teacher_id', teacher.id);
-
-  if (groupErr) {
-    console.error("❌ Failed to get group links:", groupErr);
-    return res.status(500).json({ error: 'Group link fetch failed' });
-  }
-
-  const groupIds = groupLinks.map(g => g.group_id);
-  console.log("📦 groupIds", groupIds);
-
-  if (groupIds.length === 0) return res.json([]);
-
-  // Step 3: Fetch all students in those groups
+router.get('/for-teacher', requireTeacher, async (_req, res) => {
   const { data: students, error: studentErr } = await supabase
     .from('students')
     .select('*, groups(name)')
-    .in('group_id', groupIds);
+    .order('name', { ascending: true });
 
   if (studentErr) {
-    console.error("❌ Failed to fetch students:", studentErr);
     return res.status(500).json({ error: studentErr.message });
   }
 
-  console.log("👦 students found:", students.length);
   res.json(students);
 });
 

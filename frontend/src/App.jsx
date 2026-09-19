@@ -28,13 +28,16 @@ import FolderView from "@/pages/FolderView";
 import MoodKiosk from './pages/MoodKiosk';
 import StudentQRCodes from './pages/StudentQRCodes';
 import StudentMoodReport from './pages/StudentMoodReport';
+import { ADMIN_EMAILS } from './adminList';
 
 
 
 function RoleRedirect() {
   const { user } = useUser();
   const role = user?.publicMetadata?.role;
+  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
 
+  if (ADMIN_EMAILS.includes(email)) return <Navigate to="/teacher/dashboard" replace />;
   if (role === 'teacher') return <Navigate to="/teacher/dashboard" replace />;
   if (role === 'student') return <Navigate to="/student/dashboard" replace />;
   // return <div>⚠️ Role not assigned. Please contact admin.</div>;

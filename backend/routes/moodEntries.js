@@ -2,10 +2,11 @@
 // Consolidated per-student mood tracking.
 //
 // IMPORTANT: POST /kiosk is intentionally NOT behind Clerk auth — it's
-// called from a shared, unauthenticated door-screen device (iPad) that
-// a student taps on. Protection model: (1) closed set of valid mood
-// values, (2) rate limiting per IP, (3) no sensitive data in the
-// response. student_id is visible in the name-grid UI by design.
+// called from a shared, unauthenticated door-screen device that a
+// student taps/scans. Do not add requireAuth to it. Its protection
+// model is instead: (1) a random qr_token instead of a guessable
+// student id, (2) a closed set of valid mood values, (3) rate
+// limiting, (4) no sensitive data in the response.
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import supabase from '../supabaseClient.js';
@@ -30,26 +31,23 @@ const kioskLimiter = rateLimit({
 });
 
 // POST /mood-entries/kiosk
-// Body: { student_id, mood }
-// Public (no login) — door-screen endpoint. First tap of the day
-// for a student = "morning" and auto-marks attendance present.
-// Second tap = "afternoon" (departure), no attendance change.
-// A third+ tap the same day just updates the afternoon entry —
-// "latest tap wins" for departure mood/time.
+// Body: { qr_token, mood }
+// Public (no login) — this is the door-screen endpoint.
 router.post('/kiosk', kioskLimiter, async (req, res) => {
-  const { student_id, mood } = req.body;
+  const { qr_token, mood } = req.body;
 
-  if (!student_id) {
-    return res.status(400).json({ error: 'Missing student_id' });
+  if (!qr_token || typeof qr_token !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid qr_token' });
   }
   if (!VALID_MOODS.includes(mood)) {
     return res.status(400).json({ error: 'Invalid mood value' });
   }
 
+  // Look up the student by their QR token, never by raw id.
   const { data: student, error: studentErr } = await supabase
     .from('students')
-    .select('id, name, group_id, country')
-    .eq('id', student_id)
+    .select('id, name, group_id')
+    .eq('qr_token', qr_token)
     .maybeSingle();
 
   if (studentErr) {
@@ -57,26 +55,13 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
     return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
   if (!student) {
-    return res.status(404).json({ error: 'Student not found.' });
+    // Deliberately vague — don't reveal whether the token format was
+    // valid, just unknown, to avoid helping someone enumerate tokens.
+    return res.status(404).json({ error: 'Card not recognized. Please ask a teacher for help.' });
   }
 
   const now = new Date();
   const entryDate = now.toISOString().split('T')[0];
-  const month = monthLabel(now);
-
-  const { data: todaysEntries, error: todayErr } = await supabase
-    .from('mood_entries')
-    .select('period')
-    .eq('student_id', student.id)
-    .eq('entry_date', entryDate);
-
-  if (todayErr) {
-    console.error('[mood-kiosk] today lookup error:', todayErr.message);
-    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
-  }
-
-  const hasMorning = todaysEntries?.some((e) => e.period === 'morning');
-  const period = hasMorning ? 'afternoon' : 'morning';
 
   const { error: upsertErr } = await supabase
     .from('mood_entries')
@@ -86,11 +71,9 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
         group_id: student.group_id,
         mood,
         entry_date: entryDate,
-        month,
-        period,
-        recorded_at: now.toISOString(),
+        month: monthLabel(now),
       },
-      { onConflict: 'student_id,entry_date,period' }
+      { onConflict: 'student_id,entry_date' }
     );
 
   if (upsertErr) {
@@ -98,45 +81,10 @@ router.post('/kiosk', kioskLimiter, async (req, res) => {
     return res.status(500).json({ error: 'Could not save your mood. Please try again.' });
   }
 
-  if (period === 'morning') {
-    const { error: attErr } = await supabase
-      .from('attendance_entries')
-      .upsert(
-        {
-          student_id: student.id,
-          group_id: student.group_id,
-          date: entryDate,
-          status: 'P',
-          month,
-          country: student.country,
-        },
-        { onConflict: 'student_id,date' }
-      );
-
-    if (attErr) {
-      console.error('[mood-kiosk] attendance upsert error:', attErr.message);
-    }
-  }
-
+  // Return just enough for a friendly "Thanks, Alex!" confirmation
+  // screen — first name only, nothing else about the student.
   const firstName = student.name?.split(' ')[0] || 'there';
-  res.json({ ok: true, firstName, mood, period });
-});
-
-// GET /mood-entries/roster-public?group_id=...
-// Public (no login) — used by the kiosk to show a tappable grid of
-// student names for the selected group. Names only, no tokens.
-router.get('/roster-public', kioskLimiter, async (req, res) => {
-  const { group_id } = req.query;
-  if (!group_id) return res.status(400).json({ error: 'Missing group_id' });
-
-  const { data: students, error } = await supabase
-    .from('students')
-    .select('id, name')
-    .eq('group_id', group_id)
-    .order('name', { ascending: true });
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(students);
+  res.json({ ok: true, firstName, mood });
 });
 
 // GET /mood-entries/roster-qr?group_id=...&clerk_user_id=...
@@ -146,6 +94,7 @@ router.get('/roster-qr', requireTeacher, async (req, res) => {
   const { group_id } = req.query;
   if (!group_id) return res.status(400).json({ error: 'Missing group_id' });
 
+  // Confirm this teacher actually owns this group before returning tokens.
   const { data: link, error: linkErr } = await supabase
     .from('group_teachers')
     .select('group_id')
@@ -200,7 +149,7 @@ router.get('/individual', requireTeacher, async (req, res) => {
 
   const { data: entries, error } = await supabase
     .from('mood_entries')
-    .select('mood, entry_date, period, recorded_at')
+    .select('mood, entry_date')
     .eq('student_id', student_id)
     .gte('entry_date', start.toISOString().split('T')[0])
     .lte('entry_date', end.toISOString().split('T')[0])

@@ -3,11 +3,12 @@
 import express from 'express';
 import supabase from '../supabaseClient.js';
 import multer from 'multer';
+import { requireAdmin, requireTeacher } from '../middleware/auth.js';
 const upload = multer();
 const router = express.Router();
 
 
-router.get('/', async (req, res) => {
+router.get('/', requireTeacher, async (req, res) => {
   const { month, week, language, group_id } = req.query;
 
   if (!month || !language || !group_id) {
@@ -32,7 +33,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/all', async (req, res) => {
+router.get('/all', requireTeacher, async (req, res) => {
   try {
     const { data, error } = await supabase.from('lesson_plans').select('*');
     if (error) return res.status(500).json({ error: error.message });
@@ -42,7 +43,7 @@ router.get('/all', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireTeacher, async (req, res) => {
   const { month, week, week_start, week_end, category, language, content, group_id } = req.body;
 
   const { data, error } = await supabase
@@ -55,7 +56,7 @@ router.post('/', async (req, res) => {
 });
 
 // DELETE /lesson-plans/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   // First, delete associated files
@@ -85,7 +86,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // DELETE /lesson-plans/files/:id
-router.delete('/files/:id', async (req, res) => {
+router.delete('/files/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   // 1. Get file metadata from DB
@@ -131,7 +132,7 @@ router.delete('/files/:id', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireTeacher, async (req, res) => {
   const { month, week, week_start, week_end, category, language, content } = req.body;
   const { id } = req.params;
 
@@ -145,7 +146,7 @@ router.put('/:id', async (req, res) => {
   res.json(data[0]);
 });
 // backend/routes/lessonPlans.js
-router.get('/:id/files', async (req, res) => {
+router.get('/:id/files', requireTeacher, async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
     .from('lesson_plan_files')
@@ -156,7 +157,7 @@ router.get('/:id/files', async (req, res) => {
   res.json(data);
 });
 
-router.post('/upload-multiple', upload.array('files'), async (req, res) => {
+router.post('/upload-multiple', requireTeacher, upload.array('files'), async (req, res) => {
   const { lesson_plan_id } = req.body;
   const files = req.files;
   if (!lesson_plan_id || !files?.length) return res.status(400).json({ error: 'Missing data' });
@@ -189,7 +190,7 @@ const publicUrl = urlData?.publicUrl;
   res.json({ success: true, urls: uploadedFiles });
 });
 
-router.delete('/files/:id', async (req, res) => {
+router.delete('/files/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { data: fileData, error: fetchError } = await supabase
     .from('lesson_plan_files').select('*').eq('id', id).single();

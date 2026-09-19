@@ -1,6 +1,7 @@
 import express from 'express';
 import supabase from '../supabaseClient.js';
 import { v4 as uuidv4 } from 'uuid';
+import { getRequester, requireAdmin, requireTeacher } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -18,6 +19,8 @@ router.get('/', async (_req, res) => {
 // GET single quiz with questions and full answers
 router.get('/:id', async (req, res) => {
   const quiz_id = req.params.id;
+  const requester = await getRequester(req);
+  const canSeeCorrectAnswers = Boolean(requester?.canManageStudents);
 
   const { data: quiz, error: quizErr } = await supabase
     .from('quizzes')
@@ -53,12 +56,14 @@ router.get('/:id', async (req, res) => {
       answers: qAnswers.map(a => ({
         answer_id: a.answer_id,
         answer_text: a.answer_text,
-        is_correct: a.is_correct,
+        ...(canSeeCorrectAnswers ? { is_correct: a.is_correct } : {}),
         image: a.image_url || null,
       })),
-      correct: qAnswers
-        .map((a, i) => (a.is_correct ? i : null))
-        .filter(i => i !== null),
+      ...(canSeeCorrectAnswers ? {
+        correct: qAnswers
+          .map((a, i) => (a.is_correct ? i : null))
+          .filter(i => i !== null),
+      } : {}),
     };
   });
 
@@ -70,7 +75,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create new quiz
-router.post('/', async (req, res) => {
+router.post('/', requireTeacher, async (req, res) => {
   const { title, slides, folder_id } = req.body;
   const quiz_id = uuidv4();
 
@@ -127,7 +132,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update quiz (rename + reassign folder + overwrite questions/answers)
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireTeacher, async (req, res) => {
   const quiz_id = req.params.id;
   const { quiz_name, folder_id, slides } = req.body;
 
@@ -202,7 +207,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE a quiz and its associated data
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   const quiz_id = req.params.id;
 
   try {

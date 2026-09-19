@@ -2,11 +2,12 @@
 import express from 'express';
 import supabase from '../supabaseClient.js';
 import { v4 as uuidv4 } from 'uuid';
+import { requireAdmin, requireTeacher } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // GET attendance entries (optionally filter by month)
-router.get('/', async (req, res) => {
+router.get('/', requireTeacher, async (req, res) => {
   const { month , group_id } = req.query;
 
   let query = supabase
@@ -25,7 +26,7 @@ router.get('/', async (req, res) => {
 
 
 // POST attendance entry (new)
-router.post('/', async (req, res) => {
+router.post('/', requireTeacher, async (req, res) => {
   const { student_id, date, status, month, country } = req.body;
 
   if (!student_id || !date || status === undefined || status === null || !month || !country) {
@@ -100,7 +101,7 @@ router.post('/', async (req, res) => {
 //   res.json({ message: 'Attendance updated successfully' });
 // });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireTeacher, async (req, res) => {
   const { id } = req.params;
   let status = req.body.status ?? null;
   // Normalize: empty string or whitespace = null
@@ -154,7 +155,7 @@ router.put('/:id', async (req, res) => {
 // });
 
 // Fill missing holidays for a given month
-router.post('/fill-holidays', async (req, res) => {
+router.post('/fill-holidays', requireAdmin, async (req, res) => {
   const { month } = req.body;
   if (!month) return res.status(400).json({ error: "Missing month" });
 

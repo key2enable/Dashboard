@@ -5,7 +5,8 @@ import supabase from '../supabaseClient.js';
 const router = express.Router();
 
 router.get('/lessons', async (req, res) => {
-  const { clerk_user_id, month, language } = req.query;
+  const { month, language } = req.query;
+  const clerk_user_id = req.authUserId;
 
   console.log("🟡 Incoming request:", { clerk_user_id, month, language });
 
@@ -60,7 +61,7 @@ router.get('/lessons', async (req, res) => {
 
 // GET /student-dashboard/:clerk_user_id
 router.get('/:clerk_user_id', async (req, res) => {
-  const { clerk_user_id } = req.params;
+  const clerk_user_id = req.authUserId;
 
   const { data: student, error: studentError } = await supabase
     .from('students')

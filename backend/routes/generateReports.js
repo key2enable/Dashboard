@@ -4,17 +4,15 @@ import supabase from '../supabaseClient.js';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import { stripMarkdown } from '../utils/stripMarkdown.js';
+import { requireTeacher } from '../middleware/auth.js';
 dotenv.config();
 
 const router = express.Router();
 const apiKey = process.env.OPENROUTER_API_KEY;
 
 // Single POST /comment route with proper error handling
-router.post('/comment', async (req, res) => {
+router.post('/comment', requireTeacher, async (req, res) => {
   const { student_id, month, teacher_comment } = req.body;
-
-  console.log("🔄 Received POST /comment");
-  console.log("📦 Payload:", req.body);
 
   if (!student_id || !month || !teacher_comment) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -29,22 +27,22 @@ router.post('/comment', async (req, res) => {
       .select();
 
     if (error) {
-      console.error("❌ Supabase error:", error);
+      console.error("Report comment save failed:", error.message);
       return res.status(500).json({ error: error.message });
     }
 
-    console.log("✅ Comment saved:", data);
     res.json(data[0]);
   } catch (err) {
-    console.error("🔥 Unexpected error in /comment:", err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
+    console.error("Unexpected error in /comment:", err.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Improved generate-report route
-router.post('/generate-report', async (req, res) => {
+router.post('/generate-report', requireTeacher, async (req, res) => {
   try {
-    const { student_id, month, generated_by = 'ai@system',clerk_user_id  } = req.body;
+    const { student_id, month, generated_by = 'ai@system' } = req.body;
+    const clerk_user_id = req.authUserId;
 
     if (!student_id || !month) {
       return res.status(400).json({ error: 'Missing required fields: student_id and month' });
@@ -150,10 +148,6 @@ router.post('/generate-report', async (req, res) => {
 
     ;
 
-    console.log("API KEY:", apiKey);
-    console.log("REFERER:", process.env.OPENROUTER_REFERER);
-
-
     // Send to OpenRouter
     const completion = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
@@ -196,16 +190,15 @@ router.post('/generate-report', async (req, res) => {
 
     res.json({ success: true, report });
   } catch (err) {
-    console.error("Generate report error:", err.response?.data || err);
+    console.error("Generate report error:", err.response?.data?.error || err.message);
     res.status(500).json({
-      error: 'Failed to generate report',
-      details: err.response?.data?.error || err.message
+      error: 'Failed to generate report'
     });
   }
 });
 
 // GET route for fetching reports
-router.get('/', async (req, res) => {
+router.get('/', requireTeacher, async (req, res) => {
   const { student_id, month } = req.query;
 
   if (!student_id || !month) {
@@ -263,7 +256,7 @@ router.get('/', async (req, res) => {
 //     res.status(500).json({ error: 'Internal server error', details: err.message });
 //   }
 // });
-router.post('/edit-content', async (req, res) => {
+router.post('/edit-content', requireTeacher, async (req, res) => {
   const { student_id, month, content, generated_by = 'teacher@manual' } = req.body;
 
   if (!student_id || !month || !content) {
@@ -286,13 +279,13 @@ router.post('/edit-content', async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Internal server error', details: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 
 // POST /edit-arabic — save Arabic version
-router.post('/edit-arabic', async (req, res) => {
+router.post('/edit-arabic', requireTeacher, async (req, res) => {
   const { student_id, month, content_arabic } = req.body;
 
   if (!student_id || !month || !content_arabic) {
@@ -314,8 +307,8 @@ router.post('/edit-arabic', async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("🔥 Unexpected error in /edit-arabic:", err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
+    console.error("Unexpected error in /edit-arabic:", err.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

@@ -1,6 +1,7 @@
 // File: backend/routes/quiz_groups.js
 import express from 'express';
 import supabase from '../supabaseClient.js';
+import { requireTeacher } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.get('/:quiz_id', async (req, res) => {
 });
 
 // POST assign groups to a quiz (bulk insert)
-router.post('/', async (req, res) => {
+router.post('/', requireTeacher, async (req, res) => {
   const { quiz_id, group_ids } = req.body;
 
   if (!quiz_id || !Array.isArray(group_ids)) {

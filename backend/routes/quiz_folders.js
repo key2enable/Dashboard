@@ -1,16 +1,13 @@
 import express from 'express';
 import supabase from '../supabaseClient.js';
 import { getTeacherByClerkId } from '../utils/helpers.js';
+import { requireAdmin, requireTeacher } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // GET all folders for a given teacher
-router.get('/', async (req, res) => {
-  const { clerk_user_id } = req.query;
-
-  if (!clerk_user_id) {
-    return res.status(400).json({ error: 'Missing clerk_user_id' });
-  }
+router.get('/', requireTeacher, async (req, res) => {
+  const clerk_user_id = req.authUserId;
 
   try {
     const teacher = await getTeacherByClerkId(clerk_user_id);
@@ -34,10 +31,11 @@ router.get('/', async (req, res) => {
 });
 
 // POST create new folder and assign quizzes by updating their folder_id
-router.post('/', async (req, res) => {
-  const { folder_name, quiz_ids, clerk_user_id } = req.body;
+router.post('/', requireTeacher, async (req, res) => {
+  const { folder_name, quiz_ids } = req.body;
+  const clerk_user_id = req.authUserId;
 
-  if (!folder_name || !clerk_user_id) {
+  if (!folder_name) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -63,7 +61,7 @@ router.post('/', async (req, res) => {
         const { error: updateError } = await supabase
           .from('quizzes')
           .update({ folder_id: folder.id })
-          .eq('id', quiz_id); // 🔥 FIXED LINE
+          .eq('quiz_id', quiz_id);
 
         if (updateError) {
           console.error(`Failed to assign folder to quiz ${quiz_id}:`, updateError.message);
@@ -80,10 +78,19 @@ router.post('/', async (req, res) => {
 });
 
 // DELETE folder by ID
-router.delete('/:folderId', async (req, res) => {
+router.delete('/:folderId', requireAdmin, async (req, res) => {
   const { folderId } = req.params;
 
   try {
+    const teacher = await getTeacherByClerkId(req.authUserId);
+    const { data: folder, error: folderError } = await supabase
+      .from('quiz_folders')
+      .select('id')
+      .eq('id', folderId)
+      .eq('teacher_id', teacher?.id)
+      .maybeSingle();
+    if (folderError || !folder) return res.status(404).json({ error: 'Folder not found' });
+
     // Unassign all quizzes from this folder
     const { error: updateError } = await supabase
       .from('quizzes')

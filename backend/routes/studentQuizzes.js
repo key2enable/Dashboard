@@ -6,7 +6,7 @@ const router = express.Router();
 
 // GET quizzes visible to a student based on their group
 router.get('/:clerk_user_id', async (req, res) => {
-  const { clerk_user_id } = req.params;
+  const clerk_user_id = req.authUserId;
 
   // 1. Fetch student info
   const { data: student, error: studentError } = await supabase
