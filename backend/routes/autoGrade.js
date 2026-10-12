@@ -123,19 +123,18 @@
 // export default router;
 import express from 'express';
 import multer from 'multer';
-import fs from 'fs';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import supabase from '../supabaseClient.js';
 import { requireTeacher } from '../middleware/auth.js';
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 router.post('/', requireTeacher, upload.single('worksheet'), async (req, res) => {
-  const imagePath = req.file?.path;
+  const imageBuffer = req.file?.buffer;
 
-  if (!imagePath) {
+  if (!imageBuffer) {
     console.error("🚫 No file received in request.");
     return res.status(400).json({ error: "No file uploaded" });
   }
@@ -143,7 +142,6 @@ router.post('/', requireTeacher, upload.single('worksheet'), async (req, res) =>
   try {
     const { language, month, group_id, week, week_start, week_end } = req.body;
 
-    const imageData = fs.readFileSync(imagePath);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
@@ -175,8 +173,8 @@ Return only clean JSON like:
       prompt,
       {
         inlineData: {
-          data: imageData.toString('base64'),
-          mimeType: 'image/png',
+          data: imageBuffer.toString('base64'),
+          mimeType: req.file.mimetype || 'image/png',
         },
       },
     ]);
@@ -225,13 +223,10 @@ Return only clean JSON like:
       week_end: week_end || null,
     });
 
-    fs.unlinkSync(imagePath); // cleanup
-
     res.json({ success: true, student_name: studentName, raw_score, max_score });
 
   } catch (err) {
     console.error("🔥 Error grading worksheet:", err.message);
-    if (imagePath && fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
     res.status(500).json({ error: err.message });
   }
 });
